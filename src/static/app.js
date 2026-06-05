@@ -1,3 +1,8 @@
+const SCHOOL_ACTIVITIES_NAME = "Mergington High School Activities";
+const ACTIVITY_SHARE_TEMPLATE =
+  'Check out "{activity}" at {school}! Schedule: {schedule}.';
+const EMAIL_SUBJECT_TEMPLATE = "Activity recommendation: {activity}";
+
 document.addEventListener("DOMContentLoaded", () => {
   // DOM elements
   const activitiesList = document.getElementById("activities-list");
@@ -304,6 +309,48 @@ document.addEventListener("DOMContentLoaded", () => {
     return details.schedule;
   }
 
+  function createActivitySlug(activityName) {
+    const safeName = String(activityName ?? "activity");
+
+    const slug = safeName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+
+    return slug || "activity";
+  }
+
+  function buildActivityShareMessage(activityName, schedule) {
+    return ACTIVITY_SHARE_TEMPLATE.replace("{activity}", activityName)
+      .replace("{school}", SCHOOL_ACTIVITIES_NAME)
+      .replace("{schedule}", schedule);
+  }
+
+  // Build social sharing metadata for an activity
+  function getShareData(activityName, details) {
+    const pageUrl = new URL(window.location.href);
+    pageUrl.hash = `activity-${createActivitySlug(activityName)}`;
+
+    const schedule =
+      formatSchedule(details) || "Schedule details to be announced";
+    const text = buildActivityShareMessage(activityName, schedule);
+    const encodedText = encodeURIComponent(text);
+    const encodedUrl = encodeURIComponent(pageUrl.toString());
+
+    return {
+      text,
+      url: pageUrl.toString(),
+      links: {
+        whatsapp: `https://wa.me/?text=${encodedText}%20${encodedUrl}`,
+        facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}`,
+        x: `https://x.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
+        email: `mailto:?subject=${encodeURIComponent(
+          EMAIL_SUBJECT_TEMPLATE.replace("{activity}", activityName)
+        )}&body=${encodeURIComponent(`${text}\n\n${pageUrl.toString()}`)}`,
+      },
+    };
+  }
+
   // Function to determine activity type (this would ideally come from backend)
   function getActivityType(activityName, description) {
     const name = activityName.toLowerCase();
@@ -476,6 +523,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderActivityCard(name, details) {
     const activityCard = document.createElement("div");
     activityCard.className = "activity-card";
+    activityCard.id = `activity-${createActivitySlug(name)}`;
 
     // Calculate spots and capacity
     const totalSpots = details.max_participants;
@@ -498,6 +546,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Format the schedule using the new helper function
     const formattedSchedule = formatSchedule(details);
+    const shareData = getShareData(name, details);
+    const hasNativeShareAPI = typeof navigator.share === "function";
 
     // Create activity tag
     const tagHtml = `
@@ -569,6 +619,40 @@ document.addEventListener("DOMContentLoaded", () => {
         `
         }
       </div>
+      <div class="share-actions">
+        <button class="share-button native-share-button" ${
+          hasNativeShareAPI ? "" : "disabled"
+        }>
+          Share
+        </button>
+        <a
+          class="share-button share-whatsapp"
+          href="${shareData.links.whatsapp}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          WhatsApp
+        </a>
+        <a
+          class="share-button share-facebook"
+          href="${shareData.links.facebook}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Facebook
+        </a>
+        <a
+          class="share-button share-x"
+          href="${shareData.links.x}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          X
+        </a>
+        <a class="share-button share-email" href="${shareData.links.email}">
+          Email
+        </a>
+      </div>
     `;
 
     // Add click handlers for delete buttons
@@ -585,6 +669,28 @@ document.addEventListener("DOMContentLoaded", () => {
           openRegistrationModal(name);
         });
       }
+    }
+
+    // Add native share handler when available
+    const nativeShareButton = activityCard.querySelector(".native-share-button");
+    if (hasNativeShareAPI && nativeShareButton) {
+      nativeShareButton.addEventListener("click", async () => {
+        try {
+          await navigator.share({
+            title: `${name} - ${SCHOOL_ACTIVITIES_NAME}`,
+            text: shareData.text,
+            url: shareData.url,
+          });
+        } catch (error) {
+          if (error.name !== "AbortError") {
+            console.error("Error sharing activity:", error);
+            showMessage(
+              "Could not open device sharing. Please try another share option.",
+              "error"
+            );
+          }
+        }
+      });
     }
 
     activitiesList.appendChild(activityCard);
