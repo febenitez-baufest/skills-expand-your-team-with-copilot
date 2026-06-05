@@ -304,6 +304,37 @@ document.addEventListener("DOMContentLoaded", () => {
     return details.schedule;
   }
 
+  function createActivitySlug(activityName) {
+    return activityName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+  }
+
+  // Build social sharing metadata for an activity
+  function getShareData(activityName, details) {
+    const pageUrl = new URL(window.location.href);
+    pageUrl.hash = `activity-${createActivitySlug(activityName)}`;
+
+    const schedule = formatSchedule(details);
+    const text = `Check out "${activityName}" at Mergington High School Activities! Schedule: ${schedule}.`;
+    const encodedText = encodeURIComponent(text);
+    const encodedUrl = encodeURIComponent(pageUrl.toString());
+
+    return {
+      text,
+      url: pageUrl.toString(),
+      links: {
+        whatsapp: `https://wa.me/?text=${encodedText}%20${encodedUrl}`,
+        facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}`,
+        x: `https://x.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
+        email: `mailto:?subject=${encodeURIComponent(
+          `Activity recommendation: ${activityName}`
+        )}&body=${encodeURIComponent(`${text}\n\n${pageUrl.toString()}`)}`,
+      },
+    };
+  }
+
   // Function to determine activity type (this would ideally come from backend)
   function getActivityType(activityName, description) {
     const name = activityName.toLowerCase();
@@ -476,6 +507,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderActivityCard(name, details) {
     const activityCard = document.createElement("div");
     activityCard.className = "activity-card";
+    activityCard.id = `activity-${createActivitySlug(name)}`;
 
     // Calculate spots and capacity
     const totalSpots = details.max_participants;
@@ -498,6 +530,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Format the schedule using the new helper function
     const formattedSchedule = formatSchedule(details);
+    const shareData = getShareData(name, details);
+    const canUseNativeShare = typeof navigator.share === "function";
 
     // Create activity tag
     const tagHtml = `
@@ -569,6 +603,40 @@ document.addEventListener("DOMContentLoaded", () => {
         `
         }
       </div>
+      <div class="share-actions">
+        <button class="share-button native-share-button" ${
+          canUseNativeShare ? "" : "disabled"
+        }>
+          Share
+        </button>
+        <a
+          class="share-button share-whatsapp"
+          href="${shareData.links.whatsapp}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          WhatsApp
+        </a>
+        <a
+          class="share-button share-facebook"
+          href="${shareData.links.facebook}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Facebook
+        </a>
+        <a
+          class="share-button share-x"
+          href="${shareData.links.x}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          X
+        </a>
+        <a class="share-button share-email" href="${shareData.links.email}">
+          Email
+        </a>
+      </div>
     `;
 
     // Add click handlers for delete buttons
@@ -585,6 +653,28 @@ document.addEventListener("DOMContentLoaded", () => {
           openRegistrationModal(name);
         });
       }
+    }
+
+    // Add native share handler when available
+    const nativeShareButton = activityCard.querySelector(".native-share-button");
+    if (canUseNativeShare) {
+      nativeShareButton.addEventListener("click", async () => {
+        try {
+          await navigator.share({
+            title: `${name} - Mergington High School Activities`,
+            text: shareData.text,
+            url: shareData.url,
+          });
+        } catch (error) {
+          if (error.name !== "AbortError") {
+            console.error("Error sharing activity:", error);
+            showMessage(
+              "Could not open device sharing. Please try another share option.",
+              "error"
+            );
+          }
+        }
+      });
     }
 
     activitiesList.appendChild(activityCard);
