@@ -1,3 +1,8 @@
+const SCHOOL_ACTIVITIES_NAME = "Mergington High School Activities";
+const ACTIVITY_SHARE_TEMPLATE =
+  'Check out "{activity}" at {school}! Schedule: {schedule}.';
+const EMAIL_SUBJECT_TEMPLATE = "Activity recommendation: {activity}";
+
 document.addEventListener("DOMContentLoaded", () => {
   // DOM elements
   const activitiesList = document.getElementById("activities-list");
@@ -305,10 +310,20 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function createActivitySlug(activityName) {
-    return activityName
+    const safeName = String(activityName ?? "activity");
+
+    const slug = safeName
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
+
+    return slug || "activity";
+  }
+
+  function buildActivityShareMessage(activityName, schedule) {
+    return ACTIVITY_SHARE_TEMPLATE.replace("{activity}", activityName)
+      .replace("{school}", SCHOOL_ACTIVITIES_NAME)
+      .replace("{schedule}", schedule);
   }
 
   // Build social sharing metadata for an activity
@@ -316,8 +331,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const pageUrl = new URL(window.location.href);
     pageUrl.hash = `activity-${createActivitySlug(activityName)}`;
 
-    const schedule = formatSchedule(details);
-    const text = `Check out "${activityName}" at Mergington High School Activities! Schedule: ${schedule}.`;
+    const schedule =
+      formatSchedule(details) || "Schedule details to be announced";
+    const text = buildActivityShareMessage(activityName, schedule);
     const encodedText = encodeURIComponent(text);
     const encodedUrl = encodeURIComponent(pageUrl.toString());
 
@@ -329,7 +345,7 @@ document.addEventListener("DOMContentLoaded", () => {
         facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}`,
         x: `https://x.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
         email: `mailto:?subject=${encodeURIComponent(
-          `Activity recommendation: ${activityName}`
+          EMAIL_SUBJECT_TEMPLATE.replace("{activity}", activityName)
         )}&body=${encodeURIComponent(`${text}\n\n${pageUrl.toString()}`)}`,
       },
     };
@@ -531,7 +547,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Format the schedule using the new helper function
     const formattedSchedule = formatSchedule(details);
     const shareData = getShareData(name, details);
-    const canUseNativeShare = typeof navigator.share === "function";
+    const hasNativeShareAPI = typeof navigator.share === "function";
 
     // Create activity tag
     const tagHtml = `
@@ -605,7 +621,7 @@ document.addEventListener("DOMContentLoaded", () => {
       </div>
       <div class="share-actions">
         <button class="share-button native-share-button" ${
-          canUseNativeShare ? "" : "disabled"
+          hasNativeShareAPI ? "" : "disabled"
         }>
           Share
         </button>
@@ -657,11 +673,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Add native share handler when available
     const nativeShareButton = activityCard.querySelector(".native-share-button");
-    if (canUseNativeShare) {
+    if (hasNativeShareAPI && nativeShareButton) {
       nativeShareButton.addEventListener("click", async () => {
         try {
           await navigator.share({
-            title: `${name} - Mergington High School Activities`,
+            title: `${name} - ${SCHOOL_ACTIVITIES_NAME}`,
             text: shareData.text,
             url: shareData.url,
           });
